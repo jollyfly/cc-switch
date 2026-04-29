@@ -190,10 +190,67 @@ impl ProviderAdapter for CodexAdapter {
 
     fn get_auth_headers(&self, auth: &AuthInfo) -> Vec<(http::HeaderName, http::HeaderValue)> {
         let bearer = format!("Bearer {}", auth.api_key);
-        vec![(
-            http::HeaderName::from_static("authorization"),
-            http::HeaderValue::from_str(&bearer).unwrap(),
-        )]
+        match auth.strategy {
+            AuthStrategy::GitHubCopilot => {
+                let request_id = uuid::Uuid::new_v4().to_string();
+                vec![
+                    (
+                        http::HeaderName::from_static("authorization"),
+                        http::HeaderValue::from_str(&bearer).unwrap(),
+                    ),
+                    (
+                        http::HeaderName::from_static("editor-version"),
+                        http::HeaderValue::from_static(super::copilot_auth::COPILOT_EDITOR_VERSION),
+                    ),
+                    (
+                        http::HeaderName::from_static("editor-plugin-version"),
+                        http::HeaderValue::from_static(super::copilot_auth::COPILOT_PLUGIN_VERSION),
+                    ),
+                    (
+                        http::HeaderName::from_static("copilot-integration-id"),
+                        http::HeaderValue::from_static(super::copilot_auth::COPILOT_INTEGRATION_ID),
+                    ),
+                    (
+                        http::HeaderName::from_static("user-agent"),
+                        http::HeaderValue::from_static(super::copilot_auth::COPILOT_USER_AGENT),
+                    ),
+                    (
+                        http::HeaderName::from_static("x-github-api-version"),
+                        http::HeaderValue::from_static(super::copilot_auth::COPILOT_API_VERSION),
+                    ),
+                    (
+                        http::HeaderName::from_static("openai-intent"),
+                        http::HeaderValue::from_static("conversation-agent"),
+                    ),
+                    (
+                        http::HeaderName::from_static("x-initiator"),
+                        http::HeaderValue::from_static("user"),
+                    ),
+                    (
+                        http::HeaderName::from_static("x-interaction-type"),
+                        http::HeaderValue::from_static("conversation-agent"),
+                    ),
+                    (
+                        http::HeaderName::from_static("x-vscode-user-agent-library-version"),
+                        http::HeaderValue::from_static("electron-fetch"),
+                    ),
+                    (
+                        http::HeaderName::from_static("x-request-id"),
+                        http::HeaderValue::from_str(&request_id).unwrap(),
+                    ),
+                    (
+                        http::HeaderName::from_static("x-agent-task-id"),
+                        http::HeaderValue::from_str(&request_id).unwrap(),
+                    ),
+                ]
+            }
+            _ => {
+                vec![(
+                    http::HeaderName::from_static("authorization"),
+                    http::HeaderValue::from_str(&bearer).unwrap(),
+                )]
+            }
+        }
     }
 }
 
