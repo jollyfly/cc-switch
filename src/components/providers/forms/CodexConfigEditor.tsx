@@ -29,6 +29,9 @@ interface CodexConfigEditorProps {
 
   configError: string; // config.toml 错误提示
 
+  /** 隐藏 auth.json 编辑器（如 Copilot 预设，认证由 OAuth 管理） */
+  hideAuth?: boolean;
+
   onExtract?: () => void;
 
   isExtracting?: boolean;
@@ -48,6 +51,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   commonConfigError,
   authError,
   configError,
+  hideAuth,
   onExtract,
   isExtracting,
 }) => {
@@ -61,12 +65,14 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   return (
     <div className="space-y-6">
       {/* Auth JSON Section */}
-      <CodexAuthSection
-        value={authValue}
-        onChange={onAuthChange}
-        onBlur={onAuthBlur}
-        error={authError}
-      />
+      {!hideAuth && (
+        <CodexAuthSection
+          value={authValue}
+          onChange={onAuthChange}
+          onBlur={onAuthBlur}
+          error={authError}
+        />
+      )}
 
       {/* Config TOML Section */}
       <CodexConfigSection
