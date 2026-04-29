@@ -24,6 +24,15 @@ export interface CodexProviderPreset {
   // 图标配置
   icon?: string; // 图标名称
   iconColor?: string; // 图标颜色
+
+  // 供应商类型标识（用于特殊供应商检测）
+  providerType?: "github_copilot";
+
+  // 是否需要 OAuth 认证（而非 API Key）
+  requiresOAuth?: boolean;
+
+  // API 格式
+  apiFormat?: string;
 }
 
 /**
@@ -77,6 +86,27 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     },
     icon: "openai",
     iconColor: "#00A67E",
+  },
+  {
+    name: "GitHub Copilot",
+    websiteUrl: "https://github.com/features/copilot",
+    category: "third_party",
+    providerType: "github_copilot",
+    requiresOAuth: true,
+    apiFormat: "openai_chat",
+    auth: {
+      OPENAI_API_KEY: "copilot-managed-by-cc-switch",
+    },
+    config: `model = "gpt-4.1"
+model_provider = "copilot"
+disable_response_storage = true
+
+[model_providers.copilot]
+name = "copilot"
+base_url = "https://api.githubcopilot.com"
+wire_api = "responses"`,
+    icon: "github",
+    iconColor: "#000000",
   },
   {
     name: "Shengsuanyun",
