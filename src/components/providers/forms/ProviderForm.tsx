@@ -1975,7 +1975,12 @@ function ProviderFormFull({
           {/* 配置编辑器：Codex、Claude、Gemini 分别使用不同的编辑器 */}
           {appId === "codex" ? (
             <>
-              <CodexConfigEditor
+              {!(
+                templatePreset?.providerType === "github_copilot" ||
+                activePreset?.providerType === "github_copilot" ||
+                initialData?.meta?.providerType === "github_copilot"
+              ) && (
+                <CodexConfigEditor
                 authValue={codexAuth}
                 configValue={codexConfig}
                 onAuthChange={setCodexAuth}
@@ -1993,6 +1998,7 @@ function ProviderFormFull({
                 onExtract={handleCodexExtract}
                 isExtracting={isCodexExtracting}
               />
+              )}
               {settingsConfigErrorField}
             </>
           ) : appId === "gemini" ? (
