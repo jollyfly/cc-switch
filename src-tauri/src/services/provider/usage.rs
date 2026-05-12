@@ -144,19 +144,35 @@ pub async fn query_usage(
             ));
         }
 
-        // Get credentials: prioritize UsageScript values, fallback to provider config
+        // 自定义模板不需要从 provider config 回退 base_url/api_key，
+        // 因为用户直接在脚本中写完整 URL 和凭证，不依赖模板变量替换
+        let is_custom =
+            usage_script.template_type.as_deref() == Some("custom");
+
         let api_key = usage_script
             .api_key
             .clone()
             .filter(|k| !k.is_empty())
-            .or_else(|| extract_api_key_from_provider(provider))
+            .or_else(|| {
+                if !is_custom {
+                    extract_api_key_from_provider(provider)
+                } else {
+                    None
+                }
+            })
             .unwrap_or_default();
 
         let base_url = usage_script
             .base_url
             .clone()
             .filter(|u| !u.is_empty())
-            .or_else(|| extract_base_url_from_provider(provider))
+            .or_else(|| {
+                if !is_custom {
+                    extract_base_url_from_provider(provider)
+                } else {
+                    None
+                }
+            })
             .unwrap_or_default();
 
         (

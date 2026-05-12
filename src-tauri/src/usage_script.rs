@@ -24,8 +24,9 @@ pub async fn execute_usage_script(
         build_script_with_vars(script_code, api_key, base_url, access_token, user_id);
 
     // 2. 验证 base_url 的安全性（仅当提供了 base_url 时）
-    // 自定义模板模式下，用户可能不使用模板变量，而是直接在脚本中写完整 URL
-    if !base_url.is_empty() {
+    // 自定义模板模式下，用户直接在脚本中写完整 URL，不依赖 {{baseUrl}} 变量
+    // 此时 base_url 来自 provider config 回退，与脚本请求 URL 无关，跳过验证
+    if !base_url.is_empty() && !is_custom_template {
         validate_base_url(base_url)?;
     }
 

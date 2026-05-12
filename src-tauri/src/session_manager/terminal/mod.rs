@@ -82,34 +82,80 @@ end tell"#
 fn launch_ghostty(command: &str, cwd: Option<&str>) -> Result<(), String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
 
-    let mut args = vec![
-        "-na".to_string(),
-        "Ghostty".to_string(),
-        "--args".to_string(),
-        "--quit-after-last-window-closed=true".to_string(),
-    ];
-
-    if let Some(dir) = cwd {
-        if !dir.trim().is_empty() {
-            args.push(format!("--working-directory={dir}"));
-        }
-    }
-
-    args.push("-e".to_string());
-    args.push(shell);
-    args.push("-l".to_string());
-    args.push("-c".to_string());
-    args.push(command.to_string());
-
-    let status = Command::new("open")
-        .args(&args)
+    // killall -0 是 macOS 上最可靠的进程存活检测方式
+    // pgrep 在 macOS 上无法匹配 Ghostty 进程（comm 名称为全路径）
+    let running = Command::new("killall")
+        .arg("-0")
+        .arg("ghostty")
         .status()
-        .map_err(|e| format!("Failed to launch Ghostty: {e}"))?;
+        .map(|s| s.success())
+        .unwrap_or(false);
 
-    if status.success() {
-        Ok(())
+    if running {
+        // 已运行 → 使用 Ghostty 原生 AppleScript API 新建标签页
+        let cmd = format!("{} -l -c {}", shell, shell_escape(command));
+        let escaped_cmd = cmd.replace('\'', "'\\''");
+
+        let mut applescript = format!(
+            r#"tell application "Ghostty"
+    set cfg to new surface configuration
+    set command of cfg to "{cmd}"
+    set wait after command of cfg to true"#,
+            cmd = escaped_cmd
+        );
+        if let Some(ref dir) = cwd {
+            if !dir.trim().is_empty() {
+                applescript.push_str(&format!(
+                    "\n    set initial working directory of cfg to \"{}\"",
+                    dir.replace('\\', "\\\\").replace('"', "\\\"")
+                ));
+            }
+        }
+        // new tab 必须指定 in 参数，否则报 -1708 错误
+        applescript.push_str("\n    new tab in front window with configuration cfg\n    activate\nend tell");
+
+        let status = Command::new("osascript")
+            .arg("-e")
+            .arg(&applescript)
+            .status()
+            .map_err(|e| format!("Failed to launch Ghostty tab: {e}"))?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err("Failed to launch Ghostty tab.".to_string())
+        }
     } else {
-        Err("Failed to launch Ghostty. Make sure it is installed.".to_string())
+        // 未运行 → 正常启动新窗口
+        let mut args = vec![
+            "-na".to_string(),
+            "Ghostty".to_string(),
+            "--args".to_string(),
+            "--quit-after-last-window-closed=true".to_string(),
+        ];
+
+        if let Some(dir) = cwd {
+            if !dir.trim().is_empty() {
+                args.push(format!("--working-directory={dir}"));
+            }
+        }
+
+        args.push("-e".to_string());
+        args.push(shell);
+        args.push("-l".to_string());
+        args.push("-c".to_string());
+        args.push(command.to_string());
+
+        let status = Command::new("open")
+            .args(&args)
+            .status()
+            .map_err(|e| format!("Failed to launch Ghostty: {e}"))?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err("Failed to launch Ghostty. Make sure it is installed.".to_string())
+        }
     }
 }
 

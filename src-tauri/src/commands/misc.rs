@@ -920,19 +920,22 @@ fn launch_macos_terminal(config_file: &std::path::Path, cwd: Option<&Path>) -> R
     let temp_dir = std::env::temp_dir();
     let script_file = temp_dir.join(format!("cc_switch_launcher_{}.sh", std::process::id()));
     let config_path = config_file.to_string_lossy();
+    // 单引号内安全转义（end-quote, escaped-quote, start-quote）
+    let config_path_safe = config_path.replace('\'', "'\\''");
     let cd_command = build_shell_cd_command(cwd);
 
-    // Write the shell script to a temp file
+    // 通过 $SHELL -i 执行，-i 会 source .zshrc，确保 nvm/claude 等工具的 PATH 已初始化
     let script_content = format!(
         r#"#!/bin/bash
 trap 'rm -f "{config_path}" "{script_file}"' EXIT
 {cd_command}
 echo "Using provider-specific claude config:"
 echo "{config_path}"
-claude --settings "{config_path}"
-exec bash --norc --noprofile
+${{SHELL:-/bin/zsh}} -l -i -c 'claude --settings '\''{config_path_safe}'\'''
+exec ${{SHELL:-/bin/zsh}} -l -i
 "#,
         config_path = config_path,
+        config_path_safe = config_path_safe,
         script_file = script_file.display(),
         cd_command = cd_command,
     );
@@ -950,7 +953,7 @@ exec bash --norc --noprofile
         "warp" => launch_macos_warp(&script_file),
         "alacritty" => launch_macos_open_app("Alacritty", &script_file, true),
         "kitty" => launch_macos_open_app("kitty", &script_file, false),
-        "ghostty" => launch_macos_open_app("Ghostty", &script_file, true),
+        "ghostty" => launch_macos_ghostty(&script_file),
         "wezterm" => launch_macos_open_app("WezTerm", &script_file, true),
         "kaku" => launch_macos_open_app("Kaku", &script_file, true),
         _ => launch_macos_terminal_app(&script_file), // "terminal" or default
@@ -1093,6 +1096,54 @@ fn launch_macos_open_app(
     }
 
     Ok(())
+}
+
+/// macOS: Ghostty — 已运行时在新标签页中打开，未运行时正常启动
+#[cfg(target_os = "macos")]
+fn launch_macos_ghostty(script_file: &std::path::Path) -> Result<(), String> {
+    use std::process::Command;
+
+    // killall -0 是 macOS 上最可靠的进程存活检测方式
+    // pgrep 在 macOS 上无法匹配 Ghostty 进程（comm 名称为全路径）
+    let running = Command::new("killall")
+        .arg("-0")
+        .arg("ghostty")
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    let script_path = script_file.to_string_lossy();
+    let escaped = script_path.replace('\'', "'\\''");
+
+    if running {
+        // 已运行 → 使用 Ghostty 原生 AppleScript API 在当前窗口新建标签页
+        // 注意：new tab 必须指定 in 参数（目标窗口），否则会报 -1708 错误
+        let applescript = format!(
+            r#"tell application "Ghostty"
+    set cfg to new surface configuration
+    set command of cfg to "bash '{script}'"
+    set wait after command of cfg to true
+    new tab in front window with configuration cfg
+    activate
+end tell"#,
+            script = escaped
+        );
+
+        let output = Command::new("osascript")
+            .arg("-e")
+            .arg(&applescript)
+            .output()
+            .map_err(|e| format!("Ghostty osascript failed: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Ghostty tab launch failed: {stderr}"));
+        }
+        Ok(())
+    } else {
+        // 未运行 → 直接用 open -a 启动（避免 AppleScript 启动产生双窗口）
+        launch_macos_open_app("Ghostty", script_file, true)
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -1436,7 +1487,7 @@ read -n 1 -s
             "warp" => launch_macos_warp(&script_file),
             "alacritty" => launch_macos_open_app("Alacritty", &script_file, true),
             "kitty" => launch_macos_open_app("kitty", &script_file, false),
-            "ghostty" => launch_macos_open_app("Ghostty", &script_file, true),
+            "ghostty" => launch_macos_ghostty(&script_file),
             "wezterm" => launch_macos_open_app("WezTerm", &script_file, true),
             "kaku" => launch_macos_open_app("Kaku", &script_file, true),
             _ => launch_macos_terminal_app(&script_file),
